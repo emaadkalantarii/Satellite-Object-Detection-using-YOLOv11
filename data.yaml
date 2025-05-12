@@ -1,0 +1,5 @@
+
+train: /mnt/aiongpfs/users/ekalantari/CVIA/dataset/train/
+val: /mnt/aiongpfs/users/ekalantari/CVIA/dataset/val/
+nc: 11
+names: ['smart_1', 'cheops', 'lisa_pathfinder', 'debris', 'proba_3_ocs', 'soho', 'earth_observation_sat_1', 'proba_2', 'xmm_newton', 'double_star', 'proba_3_csc']
