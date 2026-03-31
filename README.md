@@ -27,12 +27,13 @@ The model detects 11 object categories:
 ## Repository Structure
 
 ```
-├── yolo_stream_m_35.py     # Data preparation + model training script
+├── yolo_stream_m_35.py     # Data preparation + augmentation + model training
+├── augmentation.py         # Offline data augmentation pipeline (Albumentations)
 ├── Submissioncode.py       # Inference + output generation script
 ├── train_yolo_m.sh         # SLURM batch job script for HPC training
 ├── data.yaml               # YOLO dataset configuration (paths + class names)
 ├── requirements.txt        # Python dependencies
-└── dataset/                # (Not included - see Data Setup below)
+└── dataset/                # (Not included — see Data Setup below)
     ├── labels/
     │   ├── train.csv
     │   └── val.csv
@@ -45,9 +46,7 @@ The model detects 11 object categories:
 
 ## Dependencies
 
-Only the following libraries are required:
-
-```bash
+```
 pip install -r requirements.txt
 ```
 
@@ -55,9 +54,10 @@ pip install -r requirements.txt
 |---------|---------|
 | `ultralytics` | YOLOv11 model training and inference |
 | `opencv-python` | Image reading and colour-space conversion |
+| `albumentations` | Offline data augmentation pipeline |
 | `torch` | PyTorch backend for model evaluation |
 
-> `os` and `csv` are Python standard library modules — no installation needed.
+`os`, `csv`, `random`, and `pathlib` are Python standard library modules — no installation needed.
 
 ---
 
@@ -68,17 +68,21 @@ The dataset is not included in this repository due to size. To reproduce the set
 1. Place training and validation images under `dataset/train/` and `dataset/val/` respectively.
 2. Place annotation files `train.csv` and `val.csv` under `dataset/labels/`.
 3. Each CSV row should follow the format: `filename, class_name, [x1, y1, x2, y2]`
-4. All images are expected to be **1024×1024 pixels**.
+4. All images are expected to be 1024×1024 pixels.
 
 ---
 
-## Data Preparation
+## Pipeline Overview
 
-`yolo_stream_m_35.py` handles two preparation steps automatically:
+`yolo_stream_m_35.py` runs the full pipeline in four sequential steps:
 
-**1. Directory restructuring** — Moves images into the `images/` subdirectory and creates the `labels/` subdirectory, as required by the YOLO format.
+### Step 1 — Directory Restructuring
 
-**2. Label conversion** — Reads bounding box annotations from the CSV files and converts them to normalised YOLO format:
+Moves images into the `images/` subdirectory and creates the `labels/` subdirectory as required by the YOLO format.
+
+### Step 2 — Label Conversion
+
+Reads bounding box annotations from the CSV files and converts them to normalised YOLO format:
 
 ```
 <class_id> <x_center> <y_center> <width> <height>
@@ -86,9 +90,26 @@ The dataset is not included in this repository due to size. To reproduce the set
 
 All coordinates are normalised by dividing by 1024 (the fixed image dimension).
 
----
+### Step 3 — Offline Data Augmentation
 
-## Model Training
+Before training, `augmentation.py` applies a domain-specific augmentation pipeline to the training set using the [Albumentations](https://albumentations.ai/) library. Each training image is augmented **3 times**, generating additional labelled samples with correctly transformed bounding boxes.
+
+The pipeline includes the following transforms, each motivated by real satellite imaging physics:
+
+| Transform | Simulation Target |
+|-----------|------------------|
+| `HorizontalFlip`, `VerticalFlip` | Arbitrary orbital viewing angles and passes |
+| `RandomRotate90` | Satellite orientation variability |
+| `RandomBrightnessContrast`, `CLAHE` | Sunlight angle variation across the orbit |
+| `GaussNoise` | CCD sensor noise in low-light / deep-space conditions |
+| `GaussianBlur`, `MotionBlur` | Optical defocus and micro-vibration from attitude control thrusters |
+| `CoarseDropout` | Sensor dead pixels and telemetry data dropout |
+
+Bounding boxes are transformed alongside each image using Albumentations' `BboxParams` with `format="yolo"`, ensuring label accuracy is preserved after every transform. Validation data is intentionally left unaugmented.
+
+> **Note:** Because augmentation is handled offline in this step, YOLO's built-in `augment` flag is set to `False` during training to avoid double-augmenting the training images.
+
+### Step 4 — Model Training
 
 The YOLOv11-Medium model (`yolo11m.pt`) is fine-tuned using the following configuration:
 
@@ -101,6 +122,7 @@ The YOLOv11-Medium model (`yolo11m.pt`) is fine-tuned using the following config
 | Initial LR | 0.01 |
 | Weight decay | 0.0005 |
 | Early stopping patience | 100 |
+| Built-in augmentation | False (handled offline in Step 3) |
 
 Training outputs (weights, logs, metrics) are saved to `runs/model_m/`.
 
@@ -108,7 +130,7 @@ Training outputs (weights, logs, metrics) are saved to `runs/model_m/`.
 
 ## Training Environment
 
-Training was executed on the **University of Luxembourg HPC Iris cluster** using a dedicated GPU node, managed via **SLURM** job scheduling.
+Training was executed on the University of Luxembourg HPC Iris cluster using a dedicated GPU node, managed via SLURM job scheduling.
 
 The batch script `train_yolo_m.sh` was submitted as follows:
 
@@ -117,10 +139,38 @@ sbatch train_yolo_m.sh
 ```
 
 Key SLURM configuration:
+
 - 1 GPU per task
 - 7 CPUs per GPU
 - Max walltime: 2 days
 - Conda environment: `yolov11`
+
+---
+
+## Results & Evaluation
+
+The final trained model was evaluated against a held-out labelled test set, achieving an overall classification accuracy of approximately **86%**.
+
+### Training Metrics
+
+The plots below show training and validation loss curves alongside key detection metrics across the first 10 checkpoint epochs:
+
+<img width="2400" height="1200" alt="results_m" src="https://github.com/user-attachments/assets/4a3a674b-8b4c-406a-b19a-c8715166503d" />
+
+
+| Metric | Trend |
+|--------|-------|
+| `train/box_loss` | Steadily decreasing — model improves bounding box localisation |
+| `train/cls_loss` | Strongly decreasing — class discrimination improves rapidly |
+| `train/dfl_loss` | Decreasing — distribution focal loss improves box regression |
+| `val/box_loss` | Decreasing and closely tracks training loss — good generalisation |
+| `val/cls_loss` | Decreasing without divergence from training — no overfitting |
+| `metrics/precision(B)` | Rising toward ~0.48 — improving positive prediction reliability |
+| `metrics/recall(B)` | Rising toward ~0.83 — model increasingly detects true objects |
+| `metrics/mAP50(B)` | Rising toward ~0.50 — solid detection performance at IoU 0.50 |
+| `metrics/mAP50-95(B)` | Rising toward ~0.50 — strong localisation quality across IoU thresholds |
+
+The close alignment between training and validation curves across all loss metrics confirms that the model generalises well and is not overfitting despite the domain-specific and relatively small dataset.
 
 ---
 
@@ -148,3 +198,4 @@ Output is saved to `dataset/submission.csv`.
 
 - Model weights (`.pt` files) are excluded from the repository via `.gitignore` due to file size.
 - The `dataset/` directory is also excluded; annotations and images must be sourced separately.
+- The results metrics plot (`results_m.png`) shows checkpointed metrics across the first 10 epochs of the 35-epoch training run.
