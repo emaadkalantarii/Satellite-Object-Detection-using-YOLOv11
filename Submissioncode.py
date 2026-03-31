@@ -1,92 +1,123 @@
-# Load the YOLOv11 model
-# Import Libraries
+"""
+Submissioncode.py
+------------------
+Inference script for satellite object detection using a fine-tuned
+YOLOv11-Medium model.
+
+Runs predictions on all test images and writes results to a CSV file
+with columns: filename, class, bbox (x1,y1,x2,y2).
+"""
+
 import os
-import pandas as pd
-import numpy as np
-import shutil
-import cv2
-import random
-import albumentations as A
-from ultralytics import YOLO
 import csv
-from PIL import Image
-import torch
+import cv2
+from ultralytics import YOLO
 
 
-model = YOLO("/mnt/aiongpfs/users/ekalantari/CVIA/runs/model_m_35/best.pt")
-model.eval()  # Set the model to evaluation mode
+# ---------------------------------------------------------------------------
+# Paths  —  update these to match your local environment
+# ---------------------------------------------------------------------------
+MODEL_PATH      = "runs/model_m/model_m_35/weights/best.pt"
+TEST_IMAGES_DIR = "dataset/test"
+OUTPUT_CSV_PATH = "dataset/submission.csv"
 
-# Class mapping dictionary
-class_pairs = {
-    0: "smart_1",
-    1: "cheops",
-    2: "lisa_pathfinder",
-    3: "debris",
-    4: "proba_3_ocs",
-    5: "soho",
-    6: "earth_observation_sat_1",
-    7: "proba_2",
-    8: "xmm_newton",
-    9: "double_star",
-    10: "proba_3_csc"
+# Minimum confidence score to accept a detection
+CONFIDENCE_THRESHOLD = 0.25
+
+# Supported image extensions
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
+
+
+# ---------------------------------------------------------------------------
+# Class mapping  (id → name)
+# ---------------------------------------------------------------------------
+CLASS_ID_TO_NAME = {
+    0:  "smart_1",
+    1:  "cheops",
+    2:  "lisa_pathfinder",
+    3:  "debris",
+    4:  "proba_3_ocs",
+    5:  "soho",
+    6:  "earth_observation_sat_1",
+    7:  "proba_2",
+    8:  "xmm_newton",
+    9:  "double_star",
+    10: "proba_3_csc",
 }
 
-# Map the predicted label index to the class name
-def class_mapping(class_number):
-    return class_pairs.get(class_number, "unknown")
 
-# Perform inference and get predictions
-def predict_image_class_and_bbox(image_path, model, confidence_threshold=0.25):
-    # Read and preprocess the image
+# ---------------------------------------------------------------------------
+# Inference helpers
+# ---------------------------------------------------------------------------
+
+def predict(image_path: str, model: YOLO) -> tuple[str, str, list[int]]:
+    """
+    Runs inference on a single image and returns the highest-confidence
+    detection.
+
+    Args:
+        image_path: Absolute or relative path to the image file.
+        model:      Loaded YOLO model instance.
+
+    Returns:
+        Tuple of (filename, class_name, [x1, y1, x2, y2]).
+        Returns ("unknown", [0, 0, 0, 0]) if no detection is found.
+    """
     image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # Perform inference
-    results = model(image)
+    results = model(image, conf=CONFIDENCE_THRESHOLD)
+    detections = results[0].boxes
 
-    # Extract bounding boxes and class labels
-    detections = results[0].boxes  # Access detected boxes
+    filename = os.path.basename(image_path)
+
     if len(detections) == 0:
-        return os.path.basename(image_path), "unknown", [0, 0, 0, 0]
+        return filename, "unknown", [0, 0, 0, 0]
 
-    # Use the detection with the highest confidence
-    best_detection = detections[0]
-    x1, y1, x2, y2 = best_detection.xyxy[0].tolist()
-    cls = int(best_detection.cls[0])
+    # Sort detections by confidence (descending) and take the best one
+    confidences = detections.conf.tolist()
+    best_idx = confidences.index(max(confidences))
+    best = detections[best_idx]
 
-    # Convert bounding box coordinates to integers
+    x1, y1, x2, y2 = best.xyxy[0].tolist()
     bbox = [int(x1), int(y1), int(x2), int(y2)]
-    class_name = class_mapping(cls)
+    class_name = CLASS_ID_TO_NAME.get(int(best.cls[0]), "unknown")
 
-    return os.path.basename(image_path), class_name, bbox
+    return filename, class_name, bbox
 
-# Path to the test images directory
-test_images_dir = "/mnt/aiongpfs/users/ekalantari/CVIA/dataset/test"
 
-# Output CSV file path
-output_csv_path = "/mnt/aiongpfs/users/ekalantari/CVIA/dataset/submission.csv"
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
-# Create the submission CSV file
-with open(output_csv_path, 'w', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(["filename", "class", "bbox"])  # Write the header
+def main():
+    print(f"Loading model from: {MODEL_PATH}")
+    model = YOLO(MODEL_PATH)
+    model.eval()
 
-    # Iterate through all images in the test directory
-    for image_name in os.listdir(test_images_dir):
-        image_path = os.path.join(test_images_dir, image_name)
+    image_files = [
+        f for f in os.listdir(TEST_IMAGES_DIR)
+        if f.lower().endswith(IMAGE_EXTENSIONS)
+    ]
+    print(f"Found {len(image_files)} test images in '{TEST_IMAGES_DIR}'")
 
-        # Check if the file is an image
-        if not image_name.lower().endswith(('.jpg', '.jpeg', '.png')):
-            print(f"Skipping non-image file: {image_name}")
-            continue
+    with open(OUTPUT_CSV_PATH, "w", newline="") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(["filename", "class", "bbox"])
 
-        try:
-            # Predict the class and bounding box for the image
-            filename, predicted_class, bbox = predict_image_class_and_bbox(image_path, model)
-            bbox_str = f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"
-            writer.writerow([filename, predicted_class, bbox_str])
-        except Exception as e:
-            print(f"Error processing {image_name}: {e}")
-            writer.writerow([image_name, "unknown", "0,0,0,0"])
+        for image_name in image_files:
+            image_path = os.path.join(TEST_IMAGES_DIR, image_name)
+            try:
+                filename, class_name, bbox = predict(image_path, model)
+                bbox_str = f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"
+                writer.writerow([filename, class_name, bbox_str])
+                print(f"  ✓ {filename}  →  {class_name}  {bbox_str}")
+            except Exception as e:
+                print(f"  ✗ Error processing {image_name}: {e}")
+                writer.writerow([image_name, "unknown", "0,0,0,0"])
 
-print(f"Submission file created at: {output_csv_path}")
+    print(f"\nSubmission saved to: {OUTPUT_CSV_PATH}")
+
+
+if __name__ == "__main__":
+    main()
