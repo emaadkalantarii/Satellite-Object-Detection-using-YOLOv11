@@ -63,16 +63,18 @@ pip install -r requirements.txt
 
 ## Data Setup
 
+### Dataset Source
+
+This project uses the **SPARK 2022 Challenge** dataset (Stream 1), provided by the University of Luxembourg's Interdisciplinary Centre for Security, Reliability and Trust (SnT). The dataset contains labelled satellite imagery across 11 object categories including real ESA spacecraft and space debris.
+
+> Dataset access: [SPARK 2022 — Stream 1](https://gitlab.com/uniluxembourg/snt/cvi2/space/spark-challenge/spark2022-utils/-/tree/main/stream-1)
+
 The dataset is not included in this repository due to size. To reproduce the setup:
 
-1. Place training and validation images under `dataset/train/` and `dataset/val/` respectively.
+1. Download Stream 1 from the link above and place training and validation images under `dataset/train/` and `dataset/val/` respectively.
 2. Place annotation files `train.csv` and `val.csv` under `dataset/labels/`.
-3. Each CSV row should follow the format: `filename, class_name, [x1, y1, x2, y2]`
-4. All images are expected to be 1024×1024 pixels.
-
-Dataset Source
-This project uses the SPARK 2022 Challenge dataset (Stream 1), provided by the University of Luxembourg's Interdisciplinary Centre for Security, Reliability and Trust (SnT). The dataset contains labeled satellite imagery across 11 object categories including real ESA spacecraft and space debris.
-Dataset access: SPARK 2022 — Stream 1
+3. Each CSV row follows the format: `filename, class_name, [x1, y1, x2, y2]`
+4. All images are 1024×1024 pixels.
 
 ---
 
@@ -159,7 +161,7 @@ The final trained model was evaluated against a held-out labelled test set, achi
 
 The plots below show training and validation loss curves alongside key detection metrics across the first 10 checkpoint epochs:
 
-<img width="2400" height="1200" alt="results_m" src="https://github.com/user-attachments/assets/4a3a674b-8b4c-406a-b19a-c8715166503d" />
+<img width="2400" height="1200" alt="results_m" src="https://github.com/user-attachments/assets/d48038cc-f5de-4319-a267-51f23c743689" />
 
 
 | Metric | Trend |
