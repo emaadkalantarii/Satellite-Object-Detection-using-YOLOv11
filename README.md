@@ -70,6 +70,10 @@ The dataset is not included in this repository due to size. To reproduce the set
 3. Each CSV row should follow the format: `filename, class_name, [x1, y1, x2, y2]`
 4. All images are expected to be 1024×1024 pixels.
 
+Dataset Source
+This project uses the SPARK 2022 Challenge dataset (Stream 1), provided by the University of Luxembourg's Interdisciplinary Centre for Security, Reliability and Trust (SnT). The dataset contains labeled satellite imagery across 11 object categories including real ESA spacecraft and space debris.
+Dataset access: SPARK 2022 — Stream 1
+
 ---
 
 ## Pipeline Overview
