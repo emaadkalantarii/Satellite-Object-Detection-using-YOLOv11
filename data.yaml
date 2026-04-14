@@ -1,5 +1,26 @@
+# data.yaml — YOLO dataset configuration
+#
+# Update the paths below to match your local environment before training.
+# Paths should point to the 'images/' subdirectory inside each split folder,
+# which is created automatically by yolo_stream_m_35.py during data preparation.
+#
+# Example for local use:
+#   train: dataset/train/images
+#   val:   dataset/val/images
 
-train: /mnt/aiongpfs/users/ekalantari/CVIA/dataset/train/
-val: /mnt/aiongpfs/users/ekalantari/CVIA/dataset/val/
+train: dataset/train/images
+val:   dataset/val/images
+
 nc: 11
-names: ['smart_1', 'cheops', 'lisa_pathfinder', 'debris', 'proba_3_ocs', 'soho', 'earth_observation_sat_1', 'proba_2', 'xmm_newton', 'double_star', 'proba_3_csc']
+names:
+  - smart_1
+  - cheops
+  - lisa_pathfinder
+  - debris
+  - proba_3_ocs
+  - soho
+  - earth_observation_sat_1
+  - proba_2
+  - xmm_newton
+  - double_star
+  - proba_3_csc

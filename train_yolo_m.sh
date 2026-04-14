@@ -3,7 +3,7 @@
 #SBATCH -J trainYolom
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-task=1                # GPU  assigned to each tasks
+#SBATCH --gpus-per-task=1                # GPU assigned to each task
 #SBATCH --cpus-per-gpu=7
 #SBATCH --time=2-00:00:00
 #SBATCH -p gpu
@@ -15,8 +15,7 @@ source ~/.bashrc
 conda deactivate
 conda activate yolov11
 
-echo 'activate'
+echo 'Environment activated'
 python --version
 pwd
-python yolo_stream_m.py
-
+python yolo_stream_m_35.py
